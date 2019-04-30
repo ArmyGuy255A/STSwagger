@@ -1,5 +1,5 @@
 # STSwagger
-STSwagger is a PowerShell module that can be used to create PowerShell modules from a Swagger API.
+STSwagger is a PowerShell script that can be used to create PowerShell modules from a Swagger API.
 
 ### Description
 STSwagger is a custom-built script that is used to convert a Swagger REST API to a PowerShell API Wrapper. The script will create a rudimentary, but mostly working core API for the module. In fact, depending on the type of authentication required, no changes will be required.
