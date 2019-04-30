@@ -518,7 +518,10 @@ function Get-STSwaggerPowerShellParameterSetUris () {
 
     $switch = @"
 `$URI = ""
-`tswitch (`$PSCmdlet.ParameterSetName)`t{{URIS}`n`t}
+`tswitch (`$PSCmdlet.ParameterSetName)
+`t{
+{URIS}
+`n`t}
 "@
     $paths = @()
     foreach ($spec in $specs) {
@@ -685,6 +688,86 @@ if (!(Test-Path $ModuleDirectory)) {
 }
 
 #Load the swagger specification file
-$swaggerContent = ""if ($PSCmdlet.ParameterSetName -eq "Download") {    Write-Host "Downloading Specification File."    $swaggerContent = Get-STSwaggerContent -Uri $SwaggerJsonURI -UseDefaultCredentials -OutFile $SwaggerOutFile} else {    Write-Host "Reading Specification File."    $swaggerContent = Get-STSwaggerContent -JsonFile $SwaggerJsonFile}if (!$swaggerContent) {     Write-Error "Unable to load Swagger Specification content."    exit }#Format the swagger specificationWrite-Host "Creating the STSwagger specification..."$specification = ConvertTo-STSwaggerSpecification -SwaggerContent $swaggerContentif (!$specification) { Write-Error "Unable to create a STSwagger Specification" }#Build the raw API objects used to create the PowerShell functionsWrite-Host "Creating the STSwagger API Objects..."$rawAPIObjects = Initialize-STSwaggerAPI -STSwaggerSpecification $specification -ModuleName $ModuleName -CmdletIdentifier $CmdletIdentifierif (!$rawAPIObjects) { Write-Error "Unable to create a STSwagger API objects" }#Build the PowerShell functionsWrite-Host "Building the STSwagger PowerShell API..."$powershellApi = ConvertTo-STSwaggerPowerShellAPI -STSwaggerAPI $rawAPIObjects -STSwaggerSpecification $specification -BaseURI $BaseURIif (!$powershellApi) { Write-Error "Unable to build the STSwagger PowerShell API" }#Build the core functions needed to execute the PowerShell APIWrite-Host "Building the STSwagger PowerShell Core API..."$powershellCoreApi = New-STSwaggerPowerShellCoreFunctions -BaseURI $BaseURI -CmdletIdentifier $CmdletIdentifierif (!$powershellCoreApi) { Write-Error "Unable to build the STSwagger PowerShell Core API" }#Create the filesWrite-Host "Writing the API out to : $PowerShellModuleFile"$powershellApi.Function > $PowerShellModuleFile$powershellCoreApi >> $PowerShellModuleFile#Make the module manifestif (!$ManifestParameters) {    Write-Host "Using default manifest parameters..."    $ManifestParameters = @{        Path = $PowerShellManifestFile;        FunctionsToExport = $powershellApi.CmdletName;        ScriptsToProcess = $AdditionalScripts;        Description = "This PowerShell API wrapper was generated with the STSwagger API Library.";        HelpInfoUri = "https://github.com/ArmyGuy255a/STSwagger";        Author = "Phillip A. Dieppa";        CompanyName = "Microsoft";        PowerShellVersion = "5.0";        ModuleVersion = [version]::new($swaggerContent.swagger)        RootModule =("{0}.psm1" -f $ModuleName)    }} else {    Write-Host "Using user supplied manifest parameters..."}try {    Write-Host "Creating Module Manifest file."    New-ModuleManifest @ManifestParameters} catch {    Write-Error "Unable to create the Module Manifest."}#Copy dependency scripts to the module directoryWrite-Host "Copying dependency scripts..."$AdditionalScripts | ForEach-Object {Copy-Item $_ $ModuleDirectory}Write-Host "Successfully executed the STSwagger PowerShell API Builder. Thanks for using STSwagger to build your PowerShell API!" -ForegroundColor GreenStart-Sleep -Seconds 5<#Examples#Using Swagger V1& .\STSwagger.ps1 -BaseURI https://swaggerwebsite -SwaggerJsonURI "https://swaggerwebsite/swagger/docs/v1" -CmdletIdentifier $CmdletIdentifier -OutputDirectory $OutputDirectory -ModuleName $ModuleName -AdditionalScripts $AdditionalScripts
-#Using Swagger V2& .\STSwagger.ps1 -BaseURI "https://petstore.swagger.io/v2" -SwaggerJsonURI "https://petstore.swagger.io/v2/swagger.json" -CmdletIdentifier "PetStore" -OutputDirectory $OutputDirectory -ModuleName "Petstore" -AdditionalScripts $AdditionalScripts
-#>
+$swaggerContent = ""
+if ($PSCmdlet.ParameterSetName -eq "Download") {
+    Write-Host "Downloading Specification File."
+    $swaggerContent = Get-STSwaggerContent -Uri $SwaggerJsonURI -UseDefaultCredentials -OutFile $SwaggerOutFile
+} else {
+    Write-Host "Reading Specification File."
+    $swaggerContent = Get-STSwaggerContent -JsonFile $SwaggerJsonFile
+}
+if (!$swaggerContent) { 
+    Write-Error "Unable to load Swagger Specification content."
+    exit 
+}
+
+#Format the swagger specification
+Write-Host "Creating the STSwagger specification..."
+$specification = ConvertTo-STSwaggerSpecification -SwaggerContent $swaggerContent
+if (!$specification) { Write-Error "Unable to create a STSwagger Specification" }
+
+#Build the raw API objects used to create the PowerShell functions
+Write-Host "Creating the STSwagger API Objects..."
+$rawAPIObjects = Initialize-STSwaggerAPI -STSwaggerSpecification $specification -ModuleName $ModuleName -CmdletIdentifier $CmdletIdentifier
+if (!$rawAPIObjects) { Write-Error "Unable to create a STSwagger API objects" }
+
+#Build the PowerShell functions
+Write-Host "Building the STSwagger PowerShell API..."
+$powershellApi = ConvertTo-STSwaggerPowerShellAPI -STSwaggerAPI $rawAPIObjects -STSwaggerSpecification $specification -BaseURI $BaseURI
+if (!$powershellApi) { Write-Error "Unable to build the STSwagger PowerShell API" }
+
+#Build the core functions needed to execute the PowerShell API
+Write-Host "Building the STSwagger PowerShell Core API..."
+$powershellCoreApi = New-STSwaggerPowerShellCoreFunctions -BaseURI $BaseURI -CmdletIdentifier $CmdletIdentifier
+if (!$powershellCoreApi) { Write-Error "Unable to build the STSwagger PowerShell Core API" }
+
+#Create the files
+Write-Host "Writing the API out to : $PowerShellModuleFile"
+$powershellApi.Function > $PowerShellModuleFile
+$powershellCoreApi >> $PowerShellModuleFile
+
+#Make the module manifest
+if (!$ManifestParameters) {
+    Write-Host "Using default manifest parameters..."
+    $ManifestParameters = @{
+        Path = $PowerShellManifestFile;
+        FunctionsToExport = $powershellApi.CmdletName;
+        ScriptsToProcess = $AdditionalScripts;
+        Description = "This PowerShell API wrapper was generated with the STSwagger API Library.";
+        HelpInfoUri = "https://github.com/ArmyGuy255a/STSwagger";
+        Author = "Phillip A. Dieppa";
+        CompanyName = "Microsoft";
+        PowerShellVersion = "5.0";
+        ModuleVersion = [version]::new($swaggerContent.swagger)
+        RootModule =("{0}.psm1" -f $ModuleName)
+    }
+} else {
+    Write-Host "Using user supplied manifest parameters..."
+}
+
+try {
+    Write-Host "Creating Module Manifest file."
+    New-ModuleManifest @ManifestParameters
+} catch {
+    Write-Error "Unable to create the Module Manifest."
+}
+
+if ($AdditionalScripts) { 
+    #Copy dependency scripts to the module directory
+    Write-Host "Copying dependency scripts..."
+    $AdditionalScripts | ForEach-Object {Copy-Item $_ $ModuleDirectory} 
+}
+
+Write-Host "Successfully executed the STSwagger PowerShell API Builder. Thanks for using STSwagger to build your PowerShell API!" -ForegroundColor Green
+Start-Sleep -Seconds 5
+
+<#Examples
+#Using Swagger V1
+& .\STSwagger.ps1 -BaseURI https://swaggerwebsite -SwaggerJsonURI "https://swaggerwebsite/swagger/docs/v1" -CmdletIdentifier $CmdletIdentifier -OutputDirectory $OutputDirectory -ModuleName $ModuleName -AdditionalScripts $AdditionalScripts
+
+
+#Using Swagger V2
+& .\STSwagger.ps1 -BaseURI "https://petstore.swagger.io/v2" -SwaggerJsonURI "https://petstore.swagger.io/v2/swagger.json" -CmdletIdentifier "PetStore" -OutputDirectory $OutputDirectory -ModuleName "Petstore" -AdditionalScripts $AdditionalScripts
+
+
+#>
