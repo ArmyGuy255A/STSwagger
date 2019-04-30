@@ -18,9 +18,9 @@ Function BuildAADApi () {
         $SwaggerJsonFile = ("{0}\{1}\{2}SwaggerSpecification.json" -f $OutputDirectory, $ModuleName, $CmdletIdentifier)
         New-Item $SwaggerJsonFile -ItemType File -Force | Out-Null
         #Download the swagger JSON file.
-        Invoke-WebRequest -Uri ($URI + "/swagger/docs/v1") -OutFile $SwaggerJsonFile -Headers $(Get-TestAuthHeader -uri $URI)
+        Invoke-WebRequest -Uri ($URI + "/swagger/docs/v1") -OutFile $SwaggerJsonFile -Headers $(Get-AuthHeader -uri $URI)
         & .\STSwagger.ps1 -BaseURI $URI -SwaggerJsonFile $SwaggerJsonFile -CmdletIdentifier $CmdletIdentifier -OutputDirectory $OutputDirectory -ModuleName $ModuleName -AdditionalScripts $AdditionalScripts
-        $(Get-Content ("{0}\{0}.psm1" -f $ModuleName)).Replace("[hashtable] `$Headers", "[hashtable] `$Headers = `$(Get-TestAuthHeader -URI '$URI')").Replace("[System.Collections.IDictionary]", "[hashtable]") | Set-Content ("{0}\{0}.psm1" -f $ModuleName)
+        $(Get-Content ("{0}\{0}.psm1" -f $ModuleName)).Replace("[hashtable] `$Headers", "[hashtable] `$Headers = `$(Get-AuthHeader -URI '$URI')").Replace("[System.Collections.IDictionary]", "[hashtable]") | Set-Content ("{0}\{0}.psm1" -f $ModuleName)
     } catch {
         #Remove the directory
         Write-Warning "Unable to create $ModuleName"
