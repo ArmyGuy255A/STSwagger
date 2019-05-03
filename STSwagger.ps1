@@ -1,4 +1,4 @@
-﻿<# DEV
+﻿
 Param (
     [Parameter(Mandatory=$True, ParameterSetName="Download")]
     [Parameter(Mandatory=$True, ParameterSetName="Local")]
@@ -34,21 +34,6 @@ Param (
     [ValidateNotNullOrEmpty()]
         [hashtable] $ManifestParameters
 )
- #>
- Param (
-    [CmdletBinding(DefaultParameterSetName="Download")]
-    [Parameter(Mandatory=$False, ParameterSetName="Download")]
-    $BaseURI = "https://intelworkbench/",
-    $SwaggerJsonURI = "https://intelworkbench/swagger/docs/v1/",
-    $CmdletIdentifier = "Iwb",
-    $OutputDirectory = "~\source\github\STSwagger",
-    $ModuleName = "IntelWorkbench",
-    $AdditionalScripts = @("C:\Users\b-phdiep\Desktop\IWBTrial\IwbOAuth.ps1")
-    #$AdditionalScripts = $null
- )
-
-
-#Input Validation
 
 #Base URI should not contain a forwardslash at the end of the string
 $trailingSlashes = "(\\*$)|(\/*$)"
@@ -57,8 +42,6 @@ $OutputDirectory = $OutputDirectory -ireplace $trailingSlashes, ""
 if ($PSCmdlet.ParameterSetName -eq 'Download') {
     $SwaggerJsonURI = $SwaggerJsonURI -ireplace $trailingSlashes, ""
 }
-
-#CmdletIdentifier
 
 #This function converts a raw Swagger Json file to a usable Specification Object
 function ConvertTo-STSwaggerSpecification () {
@@ -462,7 +445,7 @@ function Get-STSwaggerPowerShellParams {
     foreach ($spec in $specs) {
         #Loop through each parameter in each specification
         foreach ($parameter in $spec.Parameters) {
-            #Add
+            #Add specific properties
             $tempParam = New-Object -TypeName PSObject -Property @{Name = $parameter.name; Type = $parameter.type; Mandatory = $parameter.required; HelpMessage = $parameter.description; Schema = $parameter.schema; Sets = [System.Collections.ArrayList]@(); In = $parameter.in}
             $tempParam.Sets += $spec.Path
             $parameterSets += $tempParam
@@ -513,8 +496,6 @@ function Get-STSwaggerPowerShellParams {
     $parameterString += "`t`t`t[hashtable] `$Headers"
     $parameterStrings += $parameterString
 
-
-    #return $defaultParameterSet + "`tParam (`n" + ($parameterStrings -join ",`n") + "`n`t)"
     return $defaultParameterSet + "`tParam (`n" + ($parameterStrings -join ",`n") + "`n`t)"
 
 }
@@ -556,23 +537,27 @@ function Get-STSwaggerPowerShellHelp () {
 
     #Get all the proper specifications for the API object
     $spec = $STSwaggerSpecification | Where-Object {$STSwaggerAPIObject.OperationIds.Contains($_.OperationId)}
-
+    [string]$specSummary = $spec.Summary | Select-Object -Unique
+    if ($specSummary -eq "" -or $specSummary -eq $null) {$specSummary = "No description provided."}
     $helpTemplate = @"
 <#
 .DESCRIPTION
 `t{SUMMARY}
 {PARAMETERS}
 #>
-"@
+"@  
     $parameters = @()
-    foreach ($parameter in $spec.Parameters) {
+    $uniqueParameters = $spec.Parameters | Select-Object -Unique
+    foreach ($parameter in $uniqueParameters) {
         $parameterString = ""
         $parameterString += ".PARAMETER {0}`n" -f $parameter.name
-        $parameterString += "`t{0}" -f $parameter.description
+        $parameterDescription = $parameter.description
+        if (!$parameterDescription -or $parameter.description -eq $null) { $parameterDescription = "No description provided." }
+        $parameterString += "`t{0}" -f $parameterDescription
         $parameters += $parameterString
     }
-
-    return $helpTemplate.Replace("{SUMMARY}", $spec.Summary).Replace("{PARAMETERS}", $parameters -join "`n")
+    Write-Debug ($helpTemplate.Replace("{SUMMARY}", $specSummary).Replace("{PARAMETERS}", $parameters -join "`n"))
+    return $helpTemplate.Replace("{SUMMARY}", $specSummary).Replace("{PARAMETERS}", $parameters -join "`n")
    
 }
 
@@ -609,17 +594,30 @@ function Get-STSwaggerRestUriData () {
     )
 
     `$options = @()
-    [hashtable]`$body = $null
+    [hashtable]`$body = `$null
+    `$skippedParameters = @(
+        "Credential",
+        "Headers",
+        "Verbose",
+        "Debug"
+        "ErrorAction",
+        "WarningAction",
+        "InformationAction",
+        "ErrorVariable",
+        "WarningVariable",
+        "InformationVariable",
+        "OutVariable",
+        "OutBuffer",
+        "PipelineVariable"
+    )
     foreach (`$boundParameter in `$Parameters.Keys) {
         #Capture the body
         if (`$Parameters.`$boundParameter.GetType() -eq [hashtable]) {
             `$body = `$Parameters.`$boundParameter
             continue
         }
-        #Exclude the credential parameter
-        if (`$boundParameter -eq "Credential") { continue }
-        #Exclude the headers parameter
-        if (`$boundParameter -eq "Headers") { continue }
+        #Exclude various default and supplied parameters
+        if (`$skippedParameters.Contains(`$boundParameter)) { continue }
         if (`$Uri.Contains("{`$boundParameter}")) {
             `$Uri = `$Uri.Replace("{`$boundParameter}", `$Parameters.`$boundParameter)
         } else {
@@ -645,17 +643,68 @@ Function Invoke-STSwaggerRestApi {
         [Parameter(Mandatory=`$false)]
         [System.Collections.IDictionary] `$Headers = `$null
     )
-    Write-Host `$Uri -ForegroundColor Magenta
+    Write-Host `$Method.ToUpper() `$Uri -ForegroundColor Magenta
     
     `$useDefaultCredentials = `$Credential -eq `$null     
     `$result = `$null
-    `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -Body (`$Body | ConvertTo-Json) -ContentType "application/json" -Credential `$Credential -UseDefaultCredentials:`$useDefaultCredentials -Headers `$Headers
-
+    try {
+        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -Body (`$Body | ConvertTo-Json) -ContentType "application/json" -Credential `$Credential -UseDefaultCredentials:`$useDefaultCredentials -Headers `$Headers
+    } catch [System.Net.WebException] {
+        Write-Warning `$_.Exception.Message
+        Write-Host `$_.ErrorDetails.Message -ForegroundColor Yellow
+    }
     if (!`$result -or `$result -eq "null") {
         return `$null
     }
 
     return `$result
+}
+
+# Description: This simple function allows you to typically convert the results from a Get REST method
+#              to a hashtable that can be passed directly back into a Post command. This is very useful
+#              when you just need to make an update to an item, but the method requires a body.
+# Author: Adam Bertram
+# Source: https://4sysops.com/archives/convert-json-to-a-powershell-hash-table/
+function ConvertTo-Hashtable {
+    [CmdletBinding()]
+    [OutputType('hashtable')]
+    param (
+        [Parameter(ValueFromPipeline)]
+        `$InputObject
+    )
+
+    process {
+        ## Return null if the input is null. This can happen when calling the function
+        ## recursively and a property is null
+        if (`$null -eq `$InputObject) {
+            return `$null
+        }
+
+        ## Check if the input is an array or collection. If so, we also need to convert
+        ## those types into hash tables as well. This function will convert all child
+        ## objects into hash tables (if applicable)
+        if (`$InputObject -is [System.Collections.IEnumerable] -and `$InputObject -isnot [string]) {
+            `$collection = @(
+                foreach (`$object in `$InputObject) {
+                    ConvertTo-Hashtable -InputObject `$object
+                }
+            )
+
+            ## Return the array but don't enumerate it because the object may be pretty complex
+            Write-Output -NoEnumerate `$collection
+        } elseif (`$InputObject -is [psobject]) { ## If the object has properties that need enumeration
+            ## Convert it to its own hash table and return it
+            `$hash = @{}
+            foreach (`$property in `$InputObject.PSObject.Properties) {
+                `$hash[`$property.Name] = ConvertTo-Hashtable -InputObject `$property.Value
+            }
+            `$hash
+        } else {
+            ## If the object isn't an array, collection, or other object, it's already a hash table
+            ## So just return it.
+            `$InputObject
+        }
+    }
 }
 "@
     return $coreFunctions
