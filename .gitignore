@@ -328,3 +328,11 @@ ASALocalRun/
 
 # MFractors (Xamarin productivity tool) working folder 
 .mfractor/
+
+#All other PowerShell files
+*.ps1
+!STSwagger.ps1
+
+#All other folders
+/*
+!/AAD Delegate Example

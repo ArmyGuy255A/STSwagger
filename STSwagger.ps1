@@ -1,4 +1,5 @@
-﻿Param (
+﻿<# DEV
+Param (
     [Parameter(Mandatory=$True, ParameterSetName="Download")]
     [Parameter(Mandatory=$True, ParameterSetName="Local")]
     [ValidateNotNullOrEmpty()]
@@ -33,15 +34,18 @@
     [ValidateNotNullOrEmpty()]
         [hashtable] $ManifestParameters
 )
-<# DEV 
+ #>
+ Param (
+    [CmdletBinding(DefaultParameterSetName="Download")]
+    [Parameter(Mandatory=$False, ParameterSetName="Download")]
+    $BaseURI = "https://intelworkbench/",
+    $SwaggerJsonURI = "https://intelworkbench/swagger/docs/v1/",
+    $CmdletIdentifier = "Iwb",
+    $OutputDirectory = "~\source\github\STSwagger",
+    $ModuleName = "IntelWorkbench",
+    $AdditionalScripts = @("C:\Users\b-phdiep\Desktop\IWBTrial\IwbOAuth.ps1")
+ )
 
-$BaseURI = "https://intelworkbench.microsoft.com/"
-$SwaggerJsonURI = "https://intelworkbench.microsoft.com/swagger/docs/v1/"
-$CmdletIdentifier = "Iwb"
-$OutputDirectory = "~\Desktop\IWBTrial\"
-$ModuleName = "IntelWorkbenchAAD"
-$AdditionalScripts = $AdditionalScripts = @("C:\Users\b-phdiep\Desktop\IWBTrial\IwbOAuth.ps1")
-#>
 
 #Input Validation
 
@@ -475,7 +479,8 @@ function Get-STSwaggerPowerShellParams {
     foreach ($parameter in $parameterSets) {
         #Get each parameter set name
         $parameterString = ""
-        foreach ($setName in $parameter.Group.Sets) {
+        $uniqueParameterSets = $parameter.Group.Sets | Select-Object -Unique
+        foreach ($setName in $uniqueParameterSets) {
             #$helpMessage = $parameter.Group.HelpMessage | Sort-Object -Descending | Select-Object -First 1
             $parameterString += "`t`t[Parameter(Mandatory=`${0}, ParameterSetName='{1}')]`n" -f ($parameter.Group.Mandatory | Select-Object -Unique), $setName
             
@@ -483,12 +488,14 @@ function Get-STSwaggerPowerShellParams {
         $parameterString += "`t`t`t[{0}] `${1}" -f (ConvertTo-PowerShellType $parameter.Group), ($parameter.Group.Name | Select-Object -Unique)
         $parameterStrings += $parameterString        
     }
+
     #Add the credential property using each of the parametersets
     $parameterString = ""
     foreach ($setName in ($parameterSets.Group.Sets | Select-Object -Unique)) {
         #Get each parameter set name
         $parameterString += "`t`t[Parameter(Mandatory=`$False, ParameterSetName='{0}')]`n" -f $setName                
     }
+
     $parameterString += "`t`t`t[PSCredential] `$Credential"
     $parameterStrings += $parameterString
 
@@ -498,6 +505,7 @@ function Get-STSwaggerPowerShellParams {
         #Get each parameter set name
         $parameterString += "`t`t[Parameter(Mandatory=`$False, ParameterSetName='{0}')]`n" -f $setName                
     }
+
     $parameterString += "`t`t`t[hashtable] `$Headers"
     $parameterStrings += $parameterString
 
@@ -689,11 +697,11 @@ if (!(Test-Path $ModuleDirectory)) {
 
 #Load the swagger specification file
 $swaggerContent = ""
-if ($PSCmdlet.ParameterSetName -eq "Download") {
+if ($PSCmdlet.ParameterSetName -eq "Download" -or $PSCmdlet.ParameterSetName -eq "__AllParameterSets") {
     Write-Host "Downloading Specification File."
     $swaggerContent = Get-STSwaggerContent -Uri $SwaggerJsonURI -UseDefaultCredentials -OutFile $SwaggerOutFile
 } else {
-    Write-Host "Reading Specification File."
+    
     $swaggerContent = Get-STSwaggerContent -JsonFile $SwaggerJsonFile
 }
 if (!$swaggerContent) { 
