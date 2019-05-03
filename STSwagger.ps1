@@ -44,6 +44,7 @@ Param (
     $OutputDirectory = "~\source\github\STSwagger",
     $ModuleName = "IntelWorkbench",
     $AdditionalScripts = @("C:\Users\b-phdiep\Desktop\IWBTrial\IwbOAuth.ps1")
+    #$AdditionalScripts = $null
  )
 
 
@@ -385,7 +386,6 @@ function Initialize-STSwaggerAPI () {
 
     #Group the tags together by tag. Each Tag will be its own Module file
     $tags = $tags | Group-Object -Property Tags
- 
 
     $functionSchema = @{Function="";OperationIds="";Method="";Tags=""; Module=""; Path = ""}
     $functionObjects = @()
@@ -415,6 +415,10 @@ function ConvertTo-PowerShellType () {
     Param (
         $ParameterObject
     )
+
+    if ($ParameterObject.In -eq "body") {
+        return "hashtable"
+    }
 
     if ($ParameterObject.Schema -ne $null) {
         #Pull from the schema
@@ -459,7 +463,7 @@ function Get-STSwaggerPowerShellParams {
         #Loop through each parameter in each specification
         foreach ($parameter in $spec.Parameters) {
             #Add
-            $tempParam = New-Object -TypeName PSObject -Property @{Name = $parameter.name; Type = $parameter.type; Mandatory = $parameter.required; HelpMessage = $parameter.description; Schema = $parameter.schema; Sets = [System.Collections.ArrayList]@()}
+            $tempParam = New-Object -TypeName PSObject -Property @{Name = $parameter.name; Type = $parameter.type; Mandatory = $parameter.required; HelpMessage = $parameter.description; Schema = $parameter.schema; Sets = [System.Collections.ArrayList]@(); In = $parameter.in}
             $tempParam.Sets += $spec.Path
             $parameterSets += $tempParam
         }
@@ -579,9 +583,9 @@ function New-STSwaggerPowerShellFunctionTemplate {
 Function {FUNCTIONNAME} {
     {PARAMS}
 
-    `$URI = Get-STSwaggerRestURI -Parameters `$PSBoundParameters -Uri `$PSCmdlet.ParameterSetName
+    `$Data = Get-STSwaggerRestURIData -Parameters `$PSBoundParameters -Uri `$PSCmdlet.ParameterSetName
 
-    Invoke-STSwaggerRestApi -URI `$URI -Method {METHOD} -Credential `$Credential -Headers `$Headers
+    Invoke-STSwaggerRestApi -URI `$Data.URI -Body `$Data.Body -Method {METHOD} -Credential `$Credential -Headers `$Headers
 }
 "@
 
@@ -598,14 +602,20 @@ function New-STSwaggerPowerShellCoreFunctions {
     $coreFunctions = @"
 `n
 `$ENV:$CmdletIdentifier`BaseURI = '$($BaseURI -creplace "/$", "")'
-function Get-STSwaggerRestUri () {
+function Get-STSwaggerRestUriData () {
     Param (
         `$Parameters,
         `$Uri
     )
 
     `$options = @()
+    [hashtable]`$body = $null
     foreach (`$boundParameter in `$Parameters.Keys) {
+        #Capture the body
+        if (`$Parameters.`$boundParameter.GetType() -eq [hashtable]) {
+            `$body = `$Parameters.`$boundParameter
+            continue
+        }
         #Exclude the credential parameter
         if (`$boundParameter -eq "Credential") { continue }
         #Exclude the headers parameter
@@ -617,10 +627,10 @@ function Get-STSwaggerRestUri () {
         }
     }
     if (`$options) { `$Uri += "?" + (`$options -join "&") }
-    
-    return `$ENV:$CmdletIdentifier`BaseURI + `$Uri
-}
 
+    return @{URI = `$ENV:$CmdletIdentifier`BaseURI + `$Uri; Body = `$body}
+}
+ 
 #This function invokes the rest method 
 Function Invoke-STSwaggerRestApi {
     Param(
@@ -629,19 +639,17 @@ Function Invoke-STSwaggerRestApi {
         [Parameter(Mandatory=`$true)]
         [string] `$Method,
         [Parameter(Mandatory=`$false)]
+        [System.Collections.IDictionary] `$Body = `$null,
+        [Parameter(Mandatory=`$false)]
         [PSCredential] `$Credential = `$null,
         [Parameter(Mandatory=`$false)]
         [System.Collections.IDictionary] `$Headers = `$null
     )
-    Write-Host `$Uri -ForegroundColor Magenta      
+    Write-Host `$Uri -ForegroundColor Magenta
+    
+    `$useDefaultCredentials = `$Credential -eq `$null     
     `$result = `$null
-    if (`$Credential) {
-        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -ContentType "application/json" -Credential `$Credential
-    } elseif (`$Headers) {
-        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -ContentType "application/json" -Headers `$Headers
-    } else {
-        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -ContentType "application/json" -UseDefaultCredentials
-    }
+    `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -Body (`$Body | ConvertTo-Json) -ContentType "application/json" -Credential `$Credential -UseDefaultCredentials:`$useDefaultCredentials -Headers `$Headers
 
     if (!`$result -or `$result -eq "null") {
         return `$null
@@ -677,7 +685,6 @@ function ConvertTo-STSwaggerPowerShellAPI () {
         $functionBody = $functionBody.Replace("{FUNCTIONNAME}", $STSwaggerAPIObject.Function)
         $functionBody = $functionBody.Replace("{HELP}", $help)
         $functionBody = $functionBody.Replace("{METHOD}", $STSwaggerAPIObject.Method)
-
         
         $function = New-Object -TypeName PSObject -Property @{CmdletName = $STSwaggerAPIObject.Function; Module = $STSwaggerAPIObject.Module; Function = $functionBody}
         $functions += $function         
