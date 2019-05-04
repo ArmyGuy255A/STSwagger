@@ -791,11 +791,13 @@ $powershellApi.Function > $PowerShellModuleFile
 $powershellCoreApi >> $PowerShellModuleFile
 
 #Make the module manifest
+[System.Collections.ArrayList]$functionsToExport = $powershellApi.CmdletName
+$functionsToExport.Add('ConvertTo-Hashtable') | Out-Null
 if (!$ManifestParameters) {
     Write-Host "Using default manifest parameters..."
     $ManifestParameters = @{
         Path = $PowerShellManifestFile;
-        FunctionsToExport = $powershellApi.CmdletName;
+        FunctionsToExport = $functionsToExport;
         ScriptsToProcess = $AdditionalScripts;
         Description = "This PowerShell API wrapper was generated with the STSwagger API Library.";
         HelpInfoUri = "https://github.com/ArmyGuy255a/STSwagger";
