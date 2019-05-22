@@ -586,6 +586,12 @@ function New-STSwaggerPowerShellCoreFunctions {
 
     $coreFunctions = @"
 `n
+
+# This fixes an issue caused in PSVersion 5.1 and lower where Convert*-Json adds extra properties to the converted objects.
+if (`$PSVersionTable.PSVersion.Major -lt 6) {
+    Get-TypeData -TypeName System.Array | Remove-TypeData
+}
+
 `$ENV:$CmdletIdentifier`BaseURI = '$($BaseURI -creplace "/$", "")'
 function Get-STSwaggerRestUriData () {
     Param (
