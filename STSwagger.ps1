@@ -400,7 +400,7 @@ function ConvertTo-PowerShellType () {
     )
 
     if ($ParameterObject.In -eq "body") {
-        return "hashtable"
+        return "object"
     }
 
     if ($ParameterObject.Schema -ne $null) {
@@ -600,7 +600,7 @@ function Get-STSwaggerRestUriData () {
     )
 
     `$options = @()
-    [hashtable]`$body = `$null
+    [object]`$body = `$null
     `$skippedParameters = @(
         "Credential",
         "Headers",
@@ -618,7 +618,8 @@ function Get-STSwaggerRestUriData () {
     )
     foreach (`$boundParameter in `$Parameters.Keys) {
         #Capture the body
-        if (`$Parameters.`$boundParameter.GetType() -eq [hashtable]) {
+        if (`$Parameters.`$boundParameter.PSObject.TypeNames.Contains('System.Management.Automation.PSCustomObject') -or
+            `$Parameters.`$boundParameter.PSObject.TypeNames.Contains('System.Collections.Hashtable')) {
             `$body = `$Parameters.`$boundParameter
             continue
         }
@@ -643,7 +644,7 @@ Function Invoke-STSwaggerRestApi {
         [Parameter(Mandatory=`$true)]
         [string] `$Method,
         [Parameter(Mandatory=`$false)]
-        [System.Collections.IDictionary] `$Body = `$null,
+        [object] `$Body = `$null,
         [Parameter(Mandatory=`$false)]
         [PSCredential] `$Credential = `$null,
         [Parameter(Mandatory=`$false)]
@@ -654,7 +655,7 @@ Function Invoke-STSwaggerRestApi {
     `$useDefaultCredentials = `$Credential -eq `$null     
     `$result = `$null
     try {
-        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -Body (`$Body | ConvertTo-Json) -ContentType "application/json" -Credential `$Credential -UseDefaultCredentials:`$useDefaultCredentials -Headers `$Headers
+        `$result = Invoke-RestMethod -Uri `$URI -Method `$Method -Body (`$Body | ConvertTo-Json -Depth 50) -ContentType "application/json" -Credential `$Credential -UseDefaultCredentials:`$useDefaultCredentials -Headers `$Headers
     } catch [System.Net.WebException] {
         Write-Warning `$_.Exception.Message
         Write-Host `$_.ErrorDetails.Message -ForegroundColor Yellow
